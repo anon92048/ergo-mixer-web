@@ -19,7 +19,7 @@ Limitations:
 Currently only sources available; there are no binaries. This is done intentionally, as quality of the mixer is experimental at the moment, so I am limiting number of users. 
 Binaries will be available a bit later.
 
-You need for Java (JDK, 8+) and SBT to be installed on your machine. The pull the codebase with `git clone ` and run the application with `sbt clean stage` . After compilation (which takes a lot of time) 
+You need for Java (JDK, 8+) and SBT to be installed on your machine. The pull the codebase with `git clone ` and run the application with `./runweb.sh`. After compilation (which takes a lot of time) 
 go to *localhost:9000* in your browser.
 
 ## Contributions
