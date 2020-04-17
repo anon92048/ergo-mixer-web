@@ -10,7 +10,6 @@
 *.bak
 *.old
 *.json
-*.html
 *.orig
 *.zip
 *.log

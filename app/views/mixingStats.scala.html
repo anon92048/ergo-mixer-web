@@ -1,0 +1,30 @@
+@import org.ergoplatform.ergomix.mixer.Models.MixRequest
+@import org.ergoplatform.ergomix.ErgoMix
+@(mixes: Seq[MixRequest])
+
+    @main("ErgoMixer - Privacy is a basic human right!") {
+        <table border="1">
+            <thead>
+                <tr>
+                    <th>Amount</th>
+                    <th>Created</th>
+                    <th>Status</th>
+                    <th>Withdrawal Address</th>
+                    <th>Deposit Address</th>
+                    <th>To Deposit</th>
+                </tr>
+            </thead>
+            <tbody>
+            @for(m <- mixes) {
+                <tr>
+                    <td>@{m.amount/1000000000.0} Erg</td>
+                    <td>@m.creationTimePrettyPrinted</td>
+                    <td>@m.mixStatus.value</td>
+                    <td>@m.withdrawAddress</td>
+                    <td>@m.depositAddress</td>
+                    <td>@{(ErgoMix.feeAmount + m.amount) / 1000000000.0} Erg</td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    }

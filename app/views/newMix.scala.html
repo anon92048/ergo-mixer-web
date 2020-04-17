@@ -1,0 +1,11 @@
+@(form: Form[MixForm.NewMixData], postUrl: Call)(implicit request: MessagesRequestHeader)
+
+    @main("ErgoMixer - Privacy is a basic human right!") {
+        @helper.form(postUrl) {
+            @helper.CSRF.formField
+
+            @helper.inputText(form("withdrawalAddress"))
+
+            <button>Get Deposit Address</button>
+        }
+    }

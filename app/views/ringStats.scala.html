@@ -1,0 +1,24 @@
+@main("ErgoMixer - Privacy is a basic human right!") {
+    <table border="2">
+        <thead>
+            <tr>
+                <th>Parameter</th>
+                <th>Value</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>Half-mix boxes: </td>
+                <td>@RingStats.halfMixBoxesCount.map(_.toString).getOrElse("Not ready")</td>
+            </tr>
+            <tr>
+                <td>Full-mix boxes: </td>
+                <td>@RingStats.fullMixBoxesCount.map(_.toString).getOrElse("Not ready")</td>
+            </tr>
+            <tr>
+                <td>Fee emission boxes: </td>
+                <td>@RingStats.emissionBoxesCount.map(_.toString).getOrElse("Not ready")</td>
+            </tr>
+        </tbody>
+    </table>
+}
