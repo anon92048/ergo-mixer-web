@@ -1,10 +1,8 @@
 package org.ergoplatform.ergomix
 
-import org.bouncycastle.math.ec.custom.sec.SecP256K1Point
-import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder}
 import org.ergoplatform.appkit._
+import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder}
 import sigmastate.Values.ErgoTree
-import sigmastate.basics.SecP256K1
 import sigmastate.eval._
 import sigmastate.interpreter.CryptoConstants
 import special.sigma.GroupElement
@@ -65,7 +63,7 @@ class ErgoMix(ctx:BlockchainContext) {
       |    blake2b256(OUTPUTS(1).propositionBytes) == fullMixScriptHash &&
       |    OUTPUTS(1).R4[GroupElement].get == c2 &&
       |    OUTPUTS(1).R5[GroupElement].get == c1 &&
-      |    SELF.id == INPUTS(0).id
+      |    SELF.id == INPUTS(0).id && c1 != c2
       |  ) && {
       |    proveDHTuple(g, gX, c1, c2) ||
       |    proveDHTuple(g, gX, c2, c1)

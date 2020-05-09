@@ -32,8 +32,8 @@ class MixerController @Inject()(cc: MessagesControllerComponents) extends Messag
   }
 
   def mixingStats = Action {
-    val mixRequests = ergoMixer.getMixes.map(_.mixRequest).reverse
-    Ok(views.html.mixingStats(mixRequests))
+    val mixes = ergoMixer.getMixes.reverse
+    Ok(views.html.mixingStats(mixes))
   }
 
   def ringStats = Action {

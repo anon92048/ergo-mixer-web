@@ -1,13 +1,44 @@
 package org.ergoplatform.ergomix.mixer
 
+import java.security.SecureRandom
+
 import org.ergoplatform.appkit.InputBox
 import org.ergoplatform.appkit.impl.ErgoTreeContract
 import org.ergoplatform.ergomix.cli.ErgoMixCLIUtil.usingClient
 import org.ergoplatform.ergomix.cli.{Carol, ErgoMixCLIUtil}
-import org.ergoplatform.ergomix.mixer.Models.{OutBox, FBox, HBox}
+import org.ergoplatform.ergomix.mixer.Models.{FBox, HBox}
 import org.ergoplatform.ergomix.{ErgoMix, Util => EUtil}
 
 object ErgoMixerUtil {
+
+  // The minimum number of confirmations for a current mix transaction before proceeding to next step
+  val minConfirmations = 3
+
+  def isDoubleSpent(boxId:String, wrtBoxId:String): Boolean = ErgoMixCLIUtil.usingClient{ implicit ctx =>
+    val explorer: BlockExplorer = new BlockExplorer()
+    explorer.getSpendingTxId(boxId).flatMap { txId =>
+      // boxId has been spent, while the fullMixBox generated has zero confirmations. Looks like box has been double-spent elsewhere
+      explorer.getTransaction(txId).map{tx =>
+        // to be sure, get the complete tx and check that none if its outputs are our fullMixBox
+        !tx.outboxes.map(_.id).contains(wrtBoxId)
+      }
+    }
+  }.getOrElse(false)
+
+  def getRandomValidBoxId(origBoxIds:Seq[String]) = ErgoMixCLIUtil.usingClient{ implicit ctx =>
+    val random = new SecureRandom()
+    val boxIds = new scala.util.Random(random).shuffle(origBoxIds)
+    boxIds.find{boxId =>
+      try {
+        ctx.getBoxesById(boxId)
+        true
+      } catch{
+        case a:Throwable =>
+          println(s"      Error reading boxId ${boxId}: "+a.getMessage)
+          false
+      }
+    }
+  }
 
   def getFeeEmissionBoxes = ErgoMixCLIUtil.getFeeEmissionBoxes
 
