@@ -4,12 +4,11 @@ import java.math.BigInteger
 
 import org.ergoplatform.appkit._
 import org.ergoplatform.appkit.impl.ErgoTreeContract
-import special.sigma.GroupElement
+import org.ergoplatform.ergomix.ErgoMix._
 import sigmastate.eval._
+import special.sigma.GroupElement
 
 import scala.jdk.CollectionConverters._
-
-import ErgoMix._
 
 class AliceImpl (x:BigInteger) (implicit ctx: BlockchainContext) extends Alice {
 
@@ -17,21 +16,24 @@ class AliceImpl (x:BigInteger) (implicit ctx: BlockchainContext) extends Alice {
 
   implicit  val ergoMix = new ErgoMix(ctx)
   val util = new Util()
-  def spendFullMixBox(f: FullMixBox, endBoxes: Seq[EndBox], feeAmount:Long, otherInputBoxes:Array[InputBox], changeAddress:String, changeBoxRegs:Seq[ErgoValue[_]], additionalDlogSecrets:Array[BigInteger], additionalDHTuples:Array[DHT]): SignedTransaction = {
-    val (gY, gXY) = (f.r4, f.r5)
+  def spendFullMixBox(fullMixBox: FullMixBox, endBoxes: Seq[EndBox], feeAmount:Long, otherInputBoxes:Array[InputBox], changeAddress:String, changeBoxRegs:Seq[ErgoValue[_]], additionalDlogSecrets:Array[BigInteger], additionalDHTuples:Array[DHT]): SignedTransaction = {
+
+    val (gY, gXY) = (fullMixBox.r4, fullMixBox.r5)
     val txB: UnsignedTransactionBuilder = ctx.newTxBuilder
 
     val outBoxes: Seq[OutBox] = endBoxes.map{ endBox =>
-      val outBoxBuilder = txB.outBoxBuilder().value(endBox.value).contract(new ErgoTreeContract(endBox.receiverBoxScript))
+      val outBoxBuilder = outBoxBuilderWithTokens(txB.outBoxBuilder().value(endBox.value).contract(new ErgoTreeContract(endBox.receiverBoxScript)))(endBox.tokens)
+
       (if (endBox.receiverBoxRegs.isEmpty) outBoxBuilder else outBoxBuilder.registers(endBox.receiverBoxRegs:_*)).build()
     }
 
     val inputs = new java.util.ArrayList[InputBox]()
 
     otherInputBoxes.foreach(inputs.add)
-    inputs.add(f.inputBox) // add the fullmix box as the last, that way, we can have an halfmix box as the first input
 
-    val txToSign = txB.boxesToSpend(inputs)
+    inputs.add(fullMixBox.inputBox) // add the fullMixBox as the last, that way, we can have an HalfMixBox as the first input
+
+    val txToSign = ctx.newTxBuilder.boxesToSpend(inputs)
       .outputs(outBoxes:_*)
       .fee(feeAmount)
       .sendChangeTo(util.getAddress(changeAddress), changeBoxRegs:_*)
@@ -53,13 +55,15 @@ class AliceImpl (x:BigInteger) (implicit ctx: BlockchainContext) extends Alice {
   def createHalfMixBox(inputBoxes:Array[InputBox], feeAmount:Long, changeAddress:String, additionalDlogSecrets:Array[BigInteger], additionalDHTuples:Array[DHT]): HalfMixTx = {
     val txB: UnsignedTransactionBuilder = ctx.newTxBuilder
 
-    val newBox = txB.outBoxBuilder().value(
-      ErgoMix.mixAmount
-    ).registers(
-      ErgoValue.of(gX)
-    ).contract(
-      ergoMix.halfMixContract
-    ).build()
+    val newBox = outBoxBuilderWithTokens(
+      txB.outBoxBuilder().value(
+        ErgoMix.mixAmount
+      ).registers(
+        ErgoValue.of(gX)
+      ).contract(
+        ergoMix.halfMixContract
+      )
+    )(inputBoxes.uniqueTokens).build()
 
     val inputs = new java.util.ArrayList[InputBox]()
 

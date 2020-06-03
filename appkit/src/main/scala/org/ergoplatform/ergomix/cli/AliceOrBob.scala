@@ -8,6 +8,7 @@ import org.ergoplatform.ergomix.ErgoMix._
 import org.ergoplatform.ergomix.cli.ErgoMixCLIUtil.{getProver, usingClient}
 import org.ergoplatform.ergomix._
 import special.sigma.GroupElement
+import scala.jdk.CollectionConverters._
 
 object AliceOrBob {
   /*
@@ -43,7 +44,8 @@ feeAmount is the amount in fee in nanoErgs
     usingClient{implicit ctx =>
       val alice_or_bob = getProver(secret, isAlice)
       val fullMixBox: InputBox = ctx.getBoxesById(fullMixBoxId)(0)
-      val endBox = EndBox(new Util().getAddress(withdrawAddress).script, Nil, if (inputBoxIds.nonEmpty) fullMixBox.getValue else fullMixBox.getValue - feeAmount)
+      val tokens = fullMixBox.getTokens.asScala.map(ergoToken => Token(ergoToken.getId.toString, ergoToken.getValue))
+      val endBox = EndBox(new Util().getAddress(withdrawAddress).script, Nil, if (inputBoxIds.nonEmpty) fullMixBox.getValue else fullMixBox.getValue - feeAmount, tokens)
       val tx: SignedTransaction = alice_or_bob.spendFullMixBox(FullMixBox(fullMixBox), Seq(endBox), feeAmount, inputBoxIds, changeAddress, Nil, Array[BigInteger](), Array[DHT]())
       if (broadCast) ctx.sendTransaction(tx)
       tx

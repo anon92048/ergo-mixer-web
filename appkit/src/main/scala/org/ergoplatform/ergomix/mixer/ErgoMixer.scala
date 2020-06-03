@@ -5,15 +5,37 @@ import java.util.UUID
 import org.ergoplatform.ergomix.cli._
 import org.ergoplatform.ergomix.db.ScalaDB._
 import org.ergoplatform.ergomix.mixer.Columns._
-import org.ergoplatform.ergomix.mixer.Models.MixStatus.{Queued, Running}
-import org.ergoplatform.ergomix.mixer.Models.{FullMix, HalfMix, Mix, MixHistory, MixRequest, MixState, Withdraw}
+import org.ergoplatform.ergomix.mixer.Models.MixStatus.{Complete, Queued, Running}
+import org.ergoplatform.ergomix.mixer.Models.{Deposit, FullMix, HalfMix, Mix, MixHistory, MixRequest, MixState, Withdraw}
 import org.ergoplatform.ergomix.mixer.Util._
 import org.ergoplatform.ergomix.{ErgoMix, Util => EUtil}
 
-/* ErgoMix is a single round of ZeroJoin with fee emission box, while ErgoMixer is multiple rounds of ErgoMix */
+import scala.collection.immutable
+
+/* Utility methods used in other jobs or for debugging */
+
 class ErgoMixer(tables:Tables) {
   import tables._
-  Client.setClient("http://88.198.13.202:9053/", true, None)
+  Client.setClient("http://88.198.13.202:9053/", isMainnet = true, None)
+
+  def getAllUnspentDeposits:List[Deposit] = unspentDepositsTable.selectStar.as(Deposit(_))
+
+  def getMasterSecret(mixId:String) = mixRequestsTable.select(masterSecretCol).where(mixIdCol === mixId).firstAsT[BigDecimal].map(_.toBigInt)
+
+  def getDepositPrivateKey(depositAddress:String) = {
+    mixRequestsTable.select(masterSecretCol).where(depositAddressCol === depositAddress).firstAsT[BigDecimal].map(_.toBigInt).map{masterSecret =>
+      val wallet = new Wallet(masterSecret)
+      val depositSecret = wallet.getSecret(-1)
+      depositSecret
+    }
+  }
+
+  def getSpentDeposits(address: String) = spentDepositsTable.selectStar.where(addressCol === address).as(Deposit(_))
+
+  def markAsQueued(mixId:String) = {
+    if (mixStateTable.exists(mixIdCol === mixId)) throw new Exception("Mix already started")
+    mixRequestsTable.update(mixStatusCol <-- Queued.value).where(mixIdCol === mixId)
+  }
 
   def newMixRequest(numRounds:Int, withdrawAddress:String) = {
     ErgoMixCLIUtil.usingClient { implicit ctx =>
@@ -31,8 +53,6 @@ class ErgoMixer(tables:Tables) {
       s"Please deposit ${ErgoMix.feeAmount + ErgoMix.mixAmount} nanoErgs to $depositAddress"
     }
   }
-
-  def getBalance = unspentDepositsTable.select(amountCol).firstAsT[Long].sum
 
   def getMixes = {
     mixRequestsTable.select(mixReqCols:_*).as(MixRequest(_)).map{req =>
@@ -60,17 +80,23 @@ class ErgoMixer(tables:Tables) {
     fullMixTable.selectStar.where(
       mixIdCol === mixIdCol.of(mixStateTable),
       roundCol === roundCol.of(mixStateTable),
-      isAliceCol.of(mixStateTable) === false
-    ).as(FullMix(_)).filter(fullMix => ErgoMixCLIUtil.getSpendingTxId(fullMix.fullMixBoxId).isEmpty)
+      isAliceCol.of(mixStateTable) === false,
+      mixIdCol.of(mixRequestsTable) === mixIdCol,
+      mixStatusCol.of(mixRequestsTable) === Running.value
+    ).as(FullMix(_)).filter{fullMix =>
+      ErgoMixCLIUtil.getSpendingTxId(fullMix.fullMixBoxId).isEmpty
+    }
   }
-
-  def getMixStateHistoryTable = mixStateHistoryTable.selectStar.as(MixHistory(_))
 
   def getFullMixes(mixId:String) = {fullMixTable.selectStar.where(mixIdCol === mixId).as(FullMix(_))}
 
   def getHalfMixes(mixId:String) = {halfMixTable.selectStar.where(mixIdCol === mixId).as(HalfMix(_))}
 
-  def getMixHistory(mixId:String) = {mixStateHistoryTable.selectStar.where(mixIdCol === mixId).as(MixHistory(_))}
+  // def getMixHistory(mixId:String) = {mixStateHistoryArchiveTable.selectStar.where(mixIdCol === mixId).as(MixHistory(_))}
+
+  def insertMixHistory(mixId:String, round:Int, isAlice:Boolean) = {
+    mixStateHistoryTable.insert(mixId, round, isAlice, now)
+  }
 
   def decrementMixId(mixId:String, prevIsAlice:Boolean) = {
     val round = mixStateHistoryTable.select(roundCol).where(mixIdCol === mixId).firstAsT[Int].max
@@ -82,30 +108,57 @@ class ErgoMixer(tables:Tables) {
     mixStateTable.update(roundCol <-- (round - 1), isAliceCol <-- prevIsAlice).where(mixIdCol === mixId)
     mixStateHistoryTable.deleteWhere(mixIdCol === mixId, roundCol === round)
   }
-  /* General util methods, for testing or debugging
 
-    def getEmissionBoxLog = spentFeeEmissionBoxTable.selectStar.as { a =>
-      val mixId = a(0).asInstanceOf[String]
-      val round = a(1).asInstanceOf[Int]
-      val boxId = a(2).asInstanceOf[String]
-      val txId = a(3).asInstanceOf[String]
-      s"""{"mixId":"$mixId","round":$round,"boxId","$boxId","txId":"$txId"}"""
+  def undoWithdraw(txId:String) = ErgoMixCLIUtil.usingClient{implicit ctx =>
+    // should be used only in case of fork. Leaving it to be called manually for now.
+    val explorer = new BlockExplorer()
+    if (explorer.getTransaction(txId).isDefined) throw new Exception("Transaction already confirmed")
+
+    mixRequestsTable.select(mixIdCol of withdrawTable).where(
+      (txIdCol of withdrawTable) === txId,
+      (mixIdCol of mixRequestsTable) === (mixIdCol of withdrawTable),
+      (mixStatusCol of mixRequestsTable) === Complete.value
+    ).firstAsT[String].headOption.fold(
+      throw new Exception("No withdraw found")
+    ){mixId =>
+      withdrawTable.deleteWhere(txIdCol === txId)
+      mixRequestsTable.update(mixStatusCol <-- Running.value).where(mixIdCol === mixId)
     }
+  }
 
-    def clearEmissionBoxLog = spentFeeEmissionBoxTable.deleteAll
+  /* More utility methods (for debugging)
 
-    def markAsIncomplete(mixId:String) = mixRequestsTable.update(mixStatusCol <-- Running.value).where(mixIdCol === mixId)
+  def getUnspentDeposits(address:String): List[Deposit] = unspentDepositsTable.selectStar.where(addressCol === address).as(Deposit(_))
 
-    def getWithdraws = withdrawTable.selectStar.as(Withdraw(_))
+  def getAllMixHistory = mixStateHistoryTable.selectStar.as(MixHistory(_))
 
-    def getMixRequests = mixRequestsTable.select(mixReqCols:_*).as(MixRequest(_))
+  def getBalance = unspentDepositsTable.select(amountCol).firstAsT[Long].sum
 
-    def getMixHistory = mixStateHistoryTable.selectStar.as(MixHistory(_))
+  def getEmissionBoxLog = spentFeeEmissionBoxTable.selectStar.as { a =>
+    val mixId = a(0).asInstanceOf[String]
+    val round = a(1).asInstanceOf[Int]
+    val boxId = a(2).asInstanceOf[String]
+    val txId = a(3).asInstanceOf[String]
+    s"""{"mixId":"$mixId","round":$round,"boxId","$boxId","txId":"$txId"}"""
+  }
 
-    def getMixStates = mixStateTable.selectStar.as(MixState(_))
+  def clearEmissionBoxLog = spentFeeEmissionBoxTable.deleteAll
 
-    def getHalfMixes = halfMixTable.selectStar.as(HalfMix(_))
+  def markAsIncomplete(mixId:String) = mixRequestsTable.update(mixStatusCol <-- Running.value).where(mixIdCol === mixId)
 
-    def getFullMixes = fullMixTable.selectStar.as(FullMix(_))
+  def getAllSpentDeposits = spentDepositsTable.selectStar.as(Deposit(_))
+
+  def getAllWithdraws = withdrawTable.selectStar.as(Withdraw(_))
+
+  def getAllMixRequests = mixRequestsTable.select(mixReqCols:_*).as(MixRequest(_))
+
+  def getAllMixHistory = mixStateHistoryTable.selectStar.as(MixHistory(_))
+
+  def getMixStates = mixStateTable.selectStar.as(MixState(_))
+
+  def getAllHalfMixes = halfMixTable.selectStar.as(HalfMix(_))
+
+  def getAllFullMixes = fullMixTable.selectStar.as(FullMix(_))
+
   */
 }

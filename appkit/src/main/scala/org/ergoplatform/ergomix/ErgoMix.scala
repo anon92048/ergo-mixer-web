@@ -1,10 +1,9 @@
 package org.ergoplatform.ergomix
 
-import org.bouncycastle.math.ec.custom.sec.SecP256K1Point
-import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder}
 import org.ergoplatform.appkit._
+import org.ergoplatform.ergomix.mixer.ErgoMixerUtil
+import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder}
 import sigmastate.Values.ErgoTree
-import sigmastate.basics.SecP256K1
 import sigmastate.eval._
 import sigmastate.interpreter.CryptoConstants
 import special.sigma.GroupElement
@@ -16,12 +15,37 @@ class Util(implicit ctx:BlockchainContext) {
 }
 
 object ErgoMix {
-  val mixAmount = 1000000000L // in NanoErgs, = 1 Erg
+  //  val mixAmount = 1000000000L // in NanoErgs, = 1 Erg
+  val mixAmount = 1500000L // nanoErgs
   val feeAmount = 1500000L // NanoErgs
   def getHash(bytes:Array[Byte]) = scorex.crypto.hash.Blake2b256(bytes)
   val g: GroupElement = CryptoConstants.dlogGroup.generator
   def hexToGroupElement(hex:String):GroupElement = {
     JavaHelpers.decodeStringToGE(hex)
+  }
+
+  def fullMixEndBox(fullMixScriptTree:ErgoTree, r4:GroupElement, r5:GroupElement, r6:GroupElement, value:Long, tokens:Seq[Token]) = {
+    EndBox(fullMixScriptTree, Seq(ErgoValue.of(r4), ErgoValue.of(r5), ErgoValue.of(r6)), value, tokens)
+  }
+
+  def fullOutboxBuilder(outBoxBuilder:OutBoxBuilder)(value:Long, r4:GroupElement, r5:GroupElement, r6:GroupElement, ergoTokens:Seq[Token], fullMixScriptContract:ErgoContract) = {
+    outBoxBuilderWithTokens(
+      outBoxBuilder.value(
+        value
+      ).registers(
+        ErgoValue.of(r4), ErgoValue.of(r5), ErgoValue.of(r6)
+      ).contract(
+        fullMixScriptContract
+      )
+    )(ergoTokens)
+  }
+
+  def outBoxBuilderWithTokens(outBoxBuilder: OutBoxBuilder)(tokens:Seq[Token]) = {
+    if (tokens.isEmpty) outBoxBuilder else {
+      outBoxBuilder.tokens(
+        tokens.map(token => token.toErgoToken): _*
+      )
+    }
   }
 }
 
@@ -42,11 +66,11 @@ class ErgoMix(ctx:BlockchainContext) {
 
   val fullMixScriptErgoTree = fullMixScriptContract.getErgoTree
 
-  val fullMixScriptHash = getHash(fullMixScriptErgoTree.bytes)
+//  val fullMixScriptHash = getHash(fullMixScriptErgoTree.bytes)
 
   val halfMixContract = ctx.compileContract(
     ConstantsBuilder.create().item(
-     "fullMixScriptHash", fullMixScriptHash
+     "fullMixScript", fullMixScriptErgoTree.bytes
     ).build(),
     """{
       |  val g = groupGenerator
@@ -57,19 +81,21 @@ class ErgoMix(ctx:BlockchainContext) {
       |  val u1 = OUTPUTS(0).R6[GroupElement].get
       |  val u2 = OUTPUTS(1).R6[GroupElement].get
       |
-      |  (sigmaProp(
+      |  sigmaProp(
       |    OUTPUTS(0).value == SELF.value &&
       |    OUTPUTS(1).value == SELF.value &&
+      |    OUTPUTS(0).tokens == SELF.tokens &&
+      |    OUTPUTS(1).tokens == SELF.tokens &&
       |    u1 == gX && u2 == gX &&
-      |    blake2b256(OUTPUTS(0).propositionBytes) == fullMixScriptHash &&
-      |    blake2b256(OUTPUTS(1).propositionBytes) == fullMixScriptHash &&
+      |    OUTPUTS(0).propositionBytes == fullMixScript &&
+      |    OUTPUTS(1).propositionBytes == fullMixScript &&
       |    OUTPUTS(1).R4[GroupElement].get == c2 &&
       |    OUTPUTS(1).R5[GroupElement].get == c1 &&
-      |    SELF.id == INPUTS(0).id
+      |    SELF.id == INPUTS(0).id && c1 != c2
       |  ) && {
       |    proveDHTuple(g, gX, c1, c2) ||
       |    proveDHTuple(g, gX, c2, c1)
-      |  }) || (proveDlog(gX))
+      |  }
       |}""".stripMargin
   )
 
@@ -90,7 +116,7 @@ class ErgoMix(ctx:BlockchainContext) {
   * */
   val feeEmissionContract: ErgoContract = ctx.compileContract(
     ConstantsBuilder.create().item(
-      "fullMixScriptHash", fullMixScriptHash
+      "fullMixScript", fullMixScriptErgoTree.bytes
     ).item(
       "halfMixScriptHash", halfMixScriptHash
     ).item(
@@ -112,7 +138,7 @@ class ErgoMix(ctx:BlockchainContext) {
      */
     """
       |{
-      |  val fullMixBoxAtInput = {(i:Int) => blake2b256(INPUTS(i).propositionBytes) == fullMixScriptHash }
+      |  val fullMixBoxAtInput = {(i:Int) => INPUTS(i).propositionBytes == fullMixScript }
       |
       |  val halfMixBox = {(b:Box) => blake2b256(b.propositionBytes) == halfMixScriptHash }
       |

@@ -65,7 +65,7 @@ object SpendFullMixBoxAlice extends App {
   client.execute{implicit ctx:BlockchainContext =>
     val alice = new AliceImpl(x)
     val fullfMixBox = FullMixBox(ctx.getBoxesById(fullMixBoxId)(0))
-    val endBox = EndBox(payToGroupElement(ctx, carolGroupElement).getErgoTree, Nil, ErgoMix.mixAmount)
+    val endBox = EndBox(payToGroupElement(ctx, carolGroupElement).getErgoTree, Nil, ErgoMix.mixAmount, Nil)
     //spendFullMixBox(f: FullMixBox, endBox: EndBox, feeAmount:Long, otherInputBoxIds:Array[String], changeAddress:String, additionalDlogSecrets:Array[BigInteger], additionalDHTuples:Array[DHT])
     val tx = alice.spendFullMixBox(fullfMixBox, Seq(endBox), 1500000,
       Array(otherBoxId),
@@ -84,7 +84,7 @@ object SpendFullMixBoxBob extends App {
   client.execute{implicit ctx:BlockchainContext =>
     val bob = new BobImpl(y)
     val fullfMixBox = FullMixBox(ctx.getBoxesById(fullMixBoxId)(0))
-    val endBox = EndBox(payToGroupElement(ctx, carolGroupElement).getErgoTree, Nil, ErgoMix.mixAmount)
+    val endBox = EndBox(payToGroupElement(ctx, carolGroupElement).getErgoTree, Nil, ErgoMix.mixAmount, Nil)
     val tx = bob.spendFullMixBox(
       fullfMixBox, Seq(endBox), 1500000,
       Array(otherBoxId),

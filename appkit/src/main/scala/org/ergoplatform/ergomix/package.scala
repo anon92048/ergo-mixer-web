@@ -1,10 +1,12 @@
 package org.ergoplatform
 
 import java.math.BigInteger
+import java.util
 
-import org.ergoplatform.appkit.{BlockchainContext, ErgoValue, InputBox, SignedTransaction}
+import org.ergoplatform.appkit.{BlockchainContext, ErgoToken, ErgoValue, InputBox, SignedTransaction}
 import sigmastate.Values.ErgoTree
 import special.sigma.GroupElement
+
 import scala.jdk.CollectionConverters._
 import sigmastate.eval._
 
@@ -33,8 +35,36 @@ package object ergomix {
     require(inputBox.getValue == mixAmount)
   }
 
+  case class Token(id:String, value:Long) {
+    def toErgoToken = new ErgoToken(id, value)
+  }
+
+  case class ImprovedArrayInputBox(inputBoxes:Array[InputBox]) {
+    private lazy val ergoTokens: Array[ErgoToken] = inputBoxes.flatMap(_.getTokens.asScala)
+    private lazy val tokens = ergoTokens.map(ergoToken => Token(ergoToken.getId.toString, ergoToken.getValue))
+    lazy val uniqueTokens = {
+      for {
+        (id, grp) <- tokens.groupBy(_.id)
+      } yield Token(id, grp.map(_.value).sum)
+    }.toSeq
+  }
+
+  implicit def toImprovedArrayInputBox(inputBoxes: Array[InputBox]) = new ImprovedArrayInputBox(inputBoxes)
+
+  implicit def listErgoTokenToSeqToken(ergoTokens: util.List[ErgoToken]) = {
+    ergoTokens.asScala.map{ergoToken =>
+      Token(ergoToken.toString, ergoToken.getValue)
+    }.toSeq
+  }
+
   case class HalfMixBox(inputBox: InputBox) extends MixBox(inputBox) {
     def id = inputBox.getId.toString
+    def tokens: Seq[Token] = {
+      inputBox.getTokens.asScala.map{
+        case ergoToken => Token(ergoToken.getId.toString, ergoToken.getValue)
+      }
+    }
+
     val gX: GroupElement = getR4.getValue match {
       case g:GroupElement => g
       case any => throw new Exception(s"Invalid value in R4: $any of type ${any.getClass}")
@@ -47,9 +77,10 @@ package object ergomix {
       case (c1:GroupElement, c2:GroupElement, gX:GroupElement) => (c1, c2, gX) //Values.GroupElementConstant(c1), Values.GroupElementConstant(c2)) => (c1, c2)
       case (r4, r5, r6) => throw new Exception(s"Invalid registers R4:$r4, R5:$r5, R6:$r6")
     }
+    val tokens: Seq[Token] = inputBox.getTokens.asScala.map(ergoToken => Token(ergoToken.getId.toString, ergoToken.getValue)).toSeq
   }
 
-  case class EndBox(receiverBoxScript:ErgoTree, receiverBoxRegs:Seq[ErgoValue[_]] = Nil, value:Long) // box spending full mix box
+  case class EndBox(receiverBoxScript:ErgoTree, receiverBoxRegs:Seq[ErgoValue[_]], value:Long, tokens:Seq[Token]) // box spending full mix box
 
   trait FullMixBoxSpender {
     def spendFullMixBox(f: FullMixBox, endBoxes: Seq[EndBox], feeAmount:Long, otherInputBoxIds:Array[String], changeAddress:String, changeBoxRegs:Seq[ErgoValue[_]], additionalDlogSecrets:Array[BigInteger], additionalDHTuples:Array[DHT])(implicit ctx:BlockchainContext): SignedTransaction =
@@ -59,7 +90,7 @@ package object ergomix {
 
     def spendFullMixBoxNextAlice(f: FullMixBox, nextX:BigInteger, feeAmount:Long, otherInputBoxes:Array[InputBox], changeAddress:String, changeBoxRegs:Seq[ErgoValue[_]], additionalDlogSecrets:Array[BigInteger], additionalDHTuples:Array[DHT])(implicit ctx: BlockchainContext): HalfMixTx = {
       implicit val ergoMix = new ErgoMix(ctx)
-      val endBox = EndBox(ergoMix.halfMixContract.getErgoTree, Seq(ErgoValue.of(g.exp(nextX))), f.inputBox.getValue)
+      val endBox = EndBox(ergoMix.halfMixContract.getErgoTree, Seq(ErgoValue.of(g.exp(nextX))), f.inputBox.getValue, f.tokens)
       val signedTransaction = spendFullMixBox(f, Seq(endBox), feeAmount, otherInputBoxes, changeAddress, changeBoxRegs, additionalDlogSecrets, additionalDHTuples)
       HalfMixTx(signedTransaction)
     }
@@ -71,6 +102,7 @@ package object ergomix {
       spendFullMixBoxNextBob(f, h, nextY, feeAmount, ctx.getBoxesById(otherInputBoxIds:_*), changeAddress, changeBoxRegs, additionalDlogSecrets, additionalDHTuples)
 
     def spendFullMixBoxNextBob(f: FullMixBox, h:HalfMixBox, nextY:BigInteger, feeAmount:Long, otherInputBoxes:Array[InputBox], changeAddress:String, changeBoxRegs:Seq[ErgoValue[_]], additionalDlogSecrets:Array[BigInteger], additionalDHTuples:Array[DHT])(implicit ctx: BlockchainContext): (FullMixTx, Boolean) = {
+      require(f.tokens == h.tokens, s"Full-mix box has tokens ${f.tokens}, while half-mix box has tokens ${h.tokens}")
       implicit val ergoMix = new ErgoMix(ctx)
       val inputBoxes: Array[InputBox] = h.inputBox +: otherInputBoxes
       val gX = h.gX
@@ -78,8 +110,10 @@ package object ergomix {
       val gXY = gX.exp(nextY)
       val bit = scala.util.Random.nextBoolean()
       val (c1, c2) = if (bit) (gY, gXY) else (gXY, gY)
-      val outBox1 = EndBox(ergoMix.fullMixScriptErgoTree, Seq(ErgoValue.of(c1), ErgoValue.of(c2), ErgoValue.of(gX)), ErgoMix.mixAmount)
-      val outBox2 = EndBox(ergoMix.fullMixScriptErgoTree, Seq(ErgoValue.of(c2), ErgoValue.of(c1), ErgoValue.of(gX)), ErgoMix.mixAmount)
+
+      val outBox1 = ErgoMix.fullMixEndBox(ergoMix.fullMixScriptErgoTree, c1, c2, gX, ErgoMix.mixAmount, f.tokens)
+      val outBox2 = ErgoMix.fullMixEndBox(ergoMix.fullMixScriptErgoTree, c2, c1, gX, ErgoMix.mixAmount, f.tokens)
+
       val endBoxes = Seq(outBox1, outBox2)
       val tx: SignedTransaction = spendFullMixBox(f, endBoxes, feeAmount, inputBoxes, changeAddress, changeBoxRegs, additionalDlogSecrets, DHT(g, gX, gY, gXY, nextY) +: additionalDHTuples)
       val fullMixTx:FullMixTx = FullMixTx(tx)

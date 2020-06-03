@@ -17,6 +17,7 @@ class CarolImpl(z:BigInteger) (implicit ctx: BlockchainContext) extends Carol {
     val gZ:GroupElement = g.exp(z)
     val txB = ctx.newTxBuilder()
     val newBox = txB.outBoxBuilder().value(amount).registers(ErgoValue.of(gZ)).contract(ergoMix.feeEmissionContract).build()
+
     val inputs = new java.util.ArrayList[InputBox]()
 
     inputs.addAll(inputBoxes.toList.asJava)

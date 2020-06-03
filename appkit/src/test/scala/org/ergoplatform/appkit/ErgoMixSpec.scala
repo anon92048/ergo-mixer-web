@@ -47,7 +47,7 @@ class ErgoMixSpec extends PropSpec with Matchers
       val dummyInputBoxBob = txB2.outBoxBuilder.value(10000000000000L).contract(ctx.compileContract(ConstantsBuilder.empty(),"{sigmaProp(2 < 3)}")).build().convertToInputWith(dummyTxIdBob, 0)
 
       // the output to be created by spending a full mix box
-      val endBox = EndBox(ctx.compileContract(ConstantsBuilder.create().item("carol", gZ).build(),"{proveDlog(carol)}").getErgoTree, Nil, ErgoMix.mixAmount)
+      val endBox = EndBox(ctx.compileContract(ConstantsBuilder.create().item("carol", gZ).build(),"{proveDlog(carol)}").getErgoTree, Nil, ErgoMix.mixAmount, Nil)
 
       // Step 1. Alice creates a half mix box by spending an external box (dummyInputBoxAlice)
       val halfMixBox:HalfMixBox = alice.createHalfMixBox(Array(dummyInputBoxAlice), 0, changeAddress, noDls, noDhts).getHalfMixBox
@@ -134,7 +134,7 @@ class ErgoMixSpec extends PropSpec with Matchers
       val carol = new CarolImpl(z)
       val alice = new AliceImpl(x)
       val bob = new BobImpl(y)
-      val feeBoxDl = Array(z)
+
       val txB1 = ctx.newTxBuilder
       val txB2 = ctx.newTxBuilder
 
@@ -150,7 +150,7 @@ class ErgoMixSpec extends PropSpec with Matchers
 
 
       // the output to be created by spending a full mix box
-      val endBox = EndBox(ctx.compileContract(ConstantsBuilder.create().item("carol", gZ).build(),"{proveDlog(carol)}").getErgoTree, Nil, mixAmount)
+      val endBox = EndBox(ctx.compileContract(ConstantsBuilder.create().item("carol", gZ).build(),"{proveDlog(carol)}").getErgoTree, Nil, mixAmount, Nil)
 
 
       // Step 1. Alice creates a half mix box by spending an external box (dummyInputBoxAlice)
@@ -254,8 +254,8 @@ class BadProverSpec extends PropSpec with Matchers
     ergoClient.execute { ctx: BlockchainContext =>
       implicit val ergoMix = new ErgoMix(ctx)
       val input = ctx.newTxBuilder.outBoxBuilder.registers(
-        // ErgoValue.of(gY), ErgoValue.of(gXY) // <--- correct one, (Alice's full mix box)
-        ErgoValue.of(gXY), ErgoValue.of(gY) // <--- wrong one, (Bob's full mix box). Alice should not be able to sign.
+        ErgoValue.of(gY), ErgoValue.of(gXY) // <--- correct one, (Alice's full mix box)
+        // ErgoValue.of(gXY), ErgoValue.of(gY) // <--- wrong one, (Bob's full mix box). Alice should not be able to sign.
       ).value(10000).contract(ctx.compileContract(
         ConstantsBuilder.empty(),
         """{

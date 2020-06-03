@@ -23,11 +23,11 @@ class ScheduledJobs(mixerJobs: ErgoMixerJobs) extends Actor with ActorLogging {
   override def receive: Receive = {
     case RefreshMixingStats =>
       println(s"$currentTimeString: Refreshing mixing stats: jobs started")
-      println("rescan: " + Try(mixerJobs.rescanAllMixes))
-      println("deposits: " + Try(mixerJobs.processDeposits))
-      println("new mixes: " + Try(mixerJobs.processNewMixQueue))
-      println("full mixes: " + Try(mixerJobs.processFullMixQueue))
-      println("half mixes: " + Try(mixerJobs.processHalfMixQueue))
+      println("deposits: " + Try(mixerJobs.deposits.processDeposits))
+      println("new mixes: " + Try(mixerJobs.newMixer.processNewMixQueue))
+      println("full mixes: " + Try(mixerJobs.fullMixer.processFullMixQueue))
+      println("half mixes: " + Try(mixerJobs.halfMixer.processHalfMixQueue))
+      println("rescans: " + Try(mixerJobs.rescan.processRescanQueue))
       println(s"$currentTimeString: Refreshing mixing stats: jobs finished")
       // read mixing statuses table here and process each (unfinished) record based on its status
 

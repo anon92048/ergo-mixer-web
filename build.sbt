@@ -67,10 +67,10 @@ val sigmaStateVersion = "i609-formal-verification-346717a7-SNAPSHOT"
 val ergoWalletVersion = "appkit-wallet-f7f7d673-SNAPSHOT"
 
 lazy val sigmaState = ("org.scorexfoundation" %% "sigma-state" % sigmaStateVersion).force()
-    .exclude("ch.qos.logback", "logback-classic")
-    .exclude("org.scorexfoundation", "scrypto")
-    .exclude("org.typelevel", "machinist")
-    .exclude("org.typelevel", "cats-kernel")
+  .exclude("ch.qos.logback", "logback-classic")
+  .exclude("org.scorexfoundation", "scrypto")
+  .exclude("org.typelevel", "machinist")
+  .exclude("org.typelevel", "cats-kernel")
 
 lazy val ergoWallet = "org.ergoplatform" %% "ergo-wallet" % ergoWalletVersion
 
@@ -98,74 +98,74 @@ val apiClientDeps = Seq(
 )
 
 lazy val javaClientGenerated = (project in file("java-client-generated"))
-    .settings(
-      commonSettings,
-      name := "java-client-generated",
-      crossPaths := false,
-      libraryDependencies ++= apiClientDeps,
-      publishArtifact in (Compile, packageDoc) := false,
-      publish / skip := true
-    )
+  .settings(
+    commonSettings,
+    name := "java-client-generated",
+    crossPaths := false,
+    libraryDependencies ++= apiClientDeps,
+    publishArtifact in (Compile, packageDoc) := false,
+    publish / skip := true
+  )
 
 lazy val common = (project in file("common"))
-    .settings(
-      commonSettings ++ testSettings,
-      name := "common",
-      resolvers ++= allResolvers,
-      libraryDependencies ++= Seq(
-        sigmaState,
-        ergoWallet
-      ),
-      publish / skip := true
-    )
+  .settings(
+    commonSettings ++ testSettings,
+    name := "common",
+    resolvers ++= allResolvers,
+    libraryDependencies ++= Seq(
+      sigmaState,
+      ergoWallet
+    ),
+    publish / skip := true
+  )
 
 lazy val libApi = (project in file("lib-api"))
-    .dependsOn(common % allConfigDependency)
-    .settings(
-      commonSettings ++ testSettings,
-      resolvers ++= allResolvers,
-      name := "lib-api",
-      libraryDependencies ++= Seq(
-      ),
-      publish / skip := true
-    )
+  .dependsOn(common % allConfigDependency)
+  .settings(
+    commonSettings ++ testSettings,
+    resolvers ++= allResolvers,
+    name := "lib-api",
+    libraryDependencies ++= Seq(
+    ),
+    publish / skip := true
+  )
 
 lazy val libImpl = (project in file("lib-impl"))
-    .dependsOn(javaClientGenerated % allConfigDependency, libApi % allConfigDependency)
-    .settings(
-      commonSettings ++ testSettings,
-      name := "lib-impl",
-      resolvers ++= allResolvers,
-      libraryDependencies ++= Seq(
-      ),
-      publish / skip := true
-    )
+  .dependsOn(javaClientGenerated % allConfigDependency, libApi % allConfigDependency)
+  .settings(
+    commonSettings ++ testSettings,
+    name := "lib-impl",
+    resolvers ++= allResolvers,
+    libraryDependencies ++= Seq(
+    ),
+    publish / skip := true
+  )
 
 lazy val appkit = (project in file("appkit"))
-    .dependsOn(
-      common % allConfigDependency,
-      javaClientGenerated % allConfigDependency,
-      libApi % allConfigDependency,
-      libImpl % allConfigDependency)
-    .settings(commonSettings ++ testSettings,
-      libraryDependencies ++= Seq(mockWebServer))
-    .settings(
-      libraryDependencies += "net.snaq" % "dbpool" % "7.0.1",
-      libraryDependencies += "org.bouncycastle" % "bcprov-jdk15on" % "1.61",
-      libraryDependencies += "com.h2database" % "h2" % "1.4.199",
-      libraryDependencies += "com.typesafe.akka" %% "akka-actor" % "2.6.3"
-    )
-    .settings(
-      libraryDependencies ++= (if (scalaBinaryVersion.value == "2.12")
-        Seq(("org.scorexfoundation" %% "verified-contracts" % sigmaStateVersion).force()
-          .exclude("ch.qos.logback", "logback-classic")
-          .exclude("org.scorexfoundation", "scrypto")
-          .exclude("org.typelevel", "machinist")
-          .exclude("org.typelevel", "cats-kernel"))
-      else
-        Seq.empty)
-    )
-    .settings(publish / skip := true)
+  .dependsOn(
+    common % allConfigDependency,
+    javaClientGenerated % allConfigDependency,
+    libApi % allConfigDependency,
+    libImpl % allConfigDependency)
+  .settings(commonSettings ++ testSettings,
+    libraryDependencies ++= Seq(mockWebServer))
+  .settings(
+    libraryDependencies += "net.snaq" % "dbpool" % "7.0.1",
+    libraryDependencies += "org.bouncycastle" % "bcprov-jdk15on" % "1.61",
+    libraryDependencies += "com.h2database" % "h2" % "1.4.199",
+    libraryDependencies += "com.typesafe.akka" %% "akka-actor" % "2.6.3"
+  )
+  .settings(
+    libraryDependencies ++= (if (scalaBinaryVersion.value == "2.12")
+      Seq(("org.scorexfoundation" %% "verified-contracts" % sigmaStateVersion).force()
+        .exclude("ch.qos.logback", "logback-classic")
+        .exclude("org.scorexfoundation", "scrypto")
+        .exclude("org.typelevel", "machinist")
+        .exclude("org.typelevel", "cats-kernel"))
+    else
+      Seq.empty)
+  )
+  .settings(publish / skip := true)
 
 lazy val aggregateCompile = ScopeFilter(
   inProjects(common, javaClientGenerated, libApi, libImpl, appkit),
@@ -180,9 +180,9 @@ lazy val rootSettings = Seq(
 )
 
 lazy val root = (project in file("."))
-    .enablePlugins(PlayScala)
-    .aggregate(appkit, common, javaClientGenerated, libApi, libImpl)
-    .dependsOn(appkit, common, javaClientGenerated, libApi, libImpl)  
-    .settings(commonSettings ++ testSettings, rootSettings)
-    .settings(publish / aggregate := false)
-    .settings(publishLocal / aggregate := false)
+  .enablePlugins(PlayScala)
+  .aggregate(appkit, common, javaClientGenerated, libApi, libImpl)
+  .dependsOn(appkit, common, javaClientGenerated, libApi, libImpl)
+  .settings(commonSettings ++ testSettings, rootSettings)
+  .settings(publish / aggregate := false)
+  .settings(publishLocal / aggregate := false)

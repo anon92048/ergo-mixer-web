@@ -1,6 +1,6 @@
-@import org.ergoplatform.ergomix.mixer.Models.MixRequest
 @import org.ergoplatform.ergomix.ErgoMix
-@(mixes: Seq[MixRequest])
+@import org.ergoplatform.ergomix.mixer.Models.Mix
+@(mixes: Seq[Mix])
 
     @main("ErgoMixer - Privacy is a basic human right!") {
         <table border="1">
@@ -9,6 +9,8 @@
                     <th>Amount</th>
                     <th>Created</th>
                     <th>Status</th>
+                    <th>Round</th>
+                    <th>Box type</th>
                     <th>Withdrawal Address</th>
                     <th>Deposit Address</th>
                     <th>To Deposit</th>
@@ -17,12 +19,14 @@
             <tbody>
             @for(m <- mixes) {
                 <tr>
-                    <td>@{m.amount/1000000000.0} Erg</td>
-                    <td>@m.creationTimePrettyPrinted</td>
-                    <td>@m.mixStatus.value</td>
-                    <td>@m.withdrawAddress</td>
-                    <td>@m.depositAddress</td>
-                    <td>@{(ErgoMix.feeAmount + m.amount) / 1000000000.0} Erg</td>
+                    <td>@{m.mixRequest.amount/1000000000.0} Erg</td>
+                    <td>@m.mixRequest.creationTimePrettyPrinted</td>
+                    <td>@m.mixRequest.mixStatus.value</td>
+                    <td>@m.mixState.map(s => s.round).getOrElse(0)</td>
+                    <td>@{if (m.fullMix.isDefined) "Full" else {if (m.halfMix.isDefined) "Half" else "None"}}</td>
+                    <td>@m.mixRequest.withdrawAddress</td>
+                    <td>@m.mixRequest.depositAddress</td>
+                    <td>@{(ErgoMix.feeAmount + m.mixRequest.amount) / 1000000000.0} Erg</td>
                 </tr>
             }
             </tbody>

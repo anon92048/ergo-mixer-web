@@ -1,6 +1,7 @@
 package org.ergoplatform.ergomix
 
 import java.math.BigInteger
+import java.util
 
 import org.ergoplatform.appkit._
 import org.ergoplatform.appkit.impl.ErgoTreeContract
@@ -21,7 +22,7 @@ class BobImpl(y:BigInteger)(implicit ctx: BlockchainContext) extends Bob {
     val txB = ctx.newTxBuilder
 
     val outBoxes: Seq[OutBox] = endBoxes.map{ endBox =>
-      val outBoxBuilder = txB.outBoxBuilder().value(endBox.value).contract(new ErgoTreeContract(endBox.receiverBoxScript))
+      val outBoxBuilder = outBoxBuilderWithTokens(txB.outBoxBuilder().value(endBox.value).contract(new ErgoTreeContract(endBox.receiverBoxScript)))(endBox.tokens)
       (if (endBox.receiverBoxRegs.isEmpty) outBoxBuilder else outBoxBuilder.registers(endBox.receiverBoxRegs:_*)).build()
     }
 
@@ -56,21 +57,18 @@ class BobImpl(y:BigInteger)(implicit ctx: BlockchainContext) extends Bob {
     val (c1, c2) = if (bit) (gY, gXY) else (gXY, gY)
     val txB = ctx.newTxBuilder()
 
-    val firstOutBox = txB.outBoxBuilder().value(
-      halfMixBox.inputBox.getValue
-    ).registers(
-      ErgoValue.of(c1), ErgoValue.of(c2), ErgoValue.of(halfMixBox.gX)
-    ).contract(
-      ergoMix.fullMixScriptContract
-    ).build()
+    val halfMixBoxTokens: Seq[Token] = halfMixBox.tokens
+    val otherInputTokens: Seq[Token] = inputBoxes.uniqueTokens
 
-    val secondOutBox = txB.outBoxBuilder().value(
-      halfMixBox.inputBox.getValue
-    ).registers(
-      ErgoValue.of(c2), ErgoValue.of(c1), ErgoValue.of(halfMixBox.gX)
-    ).contract(
-      ergoMix.fullMixScriptContract
-    ).build()
+    halfMixBoxTokens.foreach{halfMixBoxToken =>
+      require(
+        otherInputTokens.exists(otherInputToken => otherInputToken.id == halfMixBoxToken.id && otherInputToken.value >= halfMixBoxToken.value),
+        s"Other inputs need at least ${halfMixBoxToken.value} tokens with Id ${halfMixBoxToken.id}"
+      )
+    }
+
+    val firstOutBox = fullOutboxBuilder(txB.outBoxBuilder())(halfMixBox.inputBox.getValue, c1, c2, halfMixBox.gX, halfMixBox.tokens, ergoMix.fullMixScriptContract).build()
+    val secondOutBox = fullOutboxBuilder(txB.outBoxBuilder())(halfMixBox.inputBox.getValue, c2, c1, halfMixBox.gX, halfMixBox.tokens, ergoMix.fullMixScriptContract).build()
 
     val inputs = new java.util.ArrayList[InputBox]()
 
